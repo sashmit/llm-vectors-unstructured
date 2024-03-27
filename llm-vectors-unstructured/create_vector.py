@@ -3,18 +3,46 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
+# tag::import_splitter[]
+from langchain.text_splitter import CharacterTextSplitter
+# end::import_splitter[]
+# tag::import_vector[]
+from langchain_community.vectorstores.neo4j_vector import Neo4jVector
+from langchain_openai import OpenAIEmbeddings
+# end::import_vector[]
 
 COURSES_PATH = "llm-vectors-unstructured/data/asciidoc"
 
-# Load lesson documents
 loader = DirectoryLoader(COURSES_PATH, glob="**/lesson.adoc", loader_cls=TextLoader)
 docs = loader.load()
 
-# Create a text splitter
-# text_splitter =
+# tag::splitter[]
+text_splitter = CharacterTextSplitter(
+    separator="\n\n",
+    chunk_size=1500,
+    chunk_overlap=200,
+)
+# end::splitter[]
 
-# Split documents into chunks
-# chunks =
+# tag::split[]
+chunks = text_splitter.split_documents(docs)
 
-# Create a Neo4j vector store
-# neo4j_db =
+print(chunks)
+# end::split[]
+
+# tag::vector[]
+neo4j_db = Neo4jVector.from_documents(
+    chunks,
+    OpenAIEmbeddings(openai_api_key=os.getenv('OPENAI_API_KEY')),
+    url=os.getenv('NEO4J_URI'),
+    username=os.getenv('NEO4J_USERNAME'),
+    password=os.getenv('NEO4J_PASSWORD'),
+    database="neo4j",  
+    index_name="chunkVector",
+    node_label="Chunk", 
+    text_node_property="text", 
+    embedding_node_property="embedding",  
+)
+print(neo4j_db)
+print('foo')
+# end::vector[]
