@@ -6,8 +6,9 @@ from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain.text_splitter import CharacterTextSplitter
 from openai import OpenAI
 from neo4j import GraphDatabase
+from textblob import TextBlob  # Import for topic extraction
 
-COURSES_PATH = "llm-vectors-unstructured/data/asciidoc"  # Update if needed for local setup 
+COURSES_PATH = "llm-vectors-unstructured/data/asciidoc" # Update if needed 
 
 # Load lesson content
 loader = DirectoryLoader(COURSES_PATH, glob="**/lesson.adoc", loader_cls=TextLoader)
@@ -29,7 +30,7 @@ def get_embedding(llm, text):
         )
     return response.data[0].embedding
 
-# --- Metadata Extraction ---
+# --- Metadata and Topic Extraction ---
 def get_course_data(llm, chunk):
     data = {}
 
@@ -41,6 +42,7 @@ def get_course_data(llm, chunk):
     data['url'] = f"https://graphacademy.neo4j.com/courses/{data['course']}/{data['module']}/{data['lesson']}"
     data['text'] = chunk.page_content
     data['embedding'] = get_embedding(llm, data['text'])
+    data['topics'] = TextBlob(data['text']).noun_phrases  # Topic Extraction
 
     return data
 
@@ -54,7 +56,7 @@ driver = GraphDatabase.driver(
         os.getenv('NEO4J_PASSWORD')
     )
 )
-driver.verify_connectivity()  # Good practice to check connection
+driver.verify_connectivity()
 
 # --- Graph Creation Logic ---
 def create_chunk(tx, data):
@@ -65,6 +67,10 @@ def create_chunk(tx, data):
         MERGE (l)-[:CONTAINS]->(p:Paragraph{text: $text})
         WITH p
         CALL db.create.setNodeVectorProperty(p, "embedding", $embedding)
+        FOREACH (topic in $topics |  
+            MERGE (t:Topic {name: topic})
+            MERGE (p)-[:MENTIONS]->(t)
+        )
         """, 
         data
         )
